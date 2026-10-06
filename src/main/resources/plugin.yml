@@ -1,0 +1,12 @@
+name: KoninskiEntityLimit
+version: 1.0.0
+main: tr.com.koninski.limit.KoninskiEntityLimit
+api-version: '26.2'
+description: Chunk ve çevresi için yeni üretim sınırları. Mevcut entityleri silmez.
+commands:
+  entitylimit:
+    description: Mevcut chunk sınırlarını görüntüler; reload ayarları yeniler.
+    usage: /entitylimit [reload]
+permissions:
+  koninski.entitylimit.admin:
+    default: op

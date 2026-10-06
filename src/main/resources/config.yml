@@ -1,0 +1,28 @@
+# Bir chunk 16x16 bloktur; yükseklik boyunca tek limit uygulanır.
+# Hayvanlar birlikte sayılır: 32 tavuk + 32 koyun değil, toplam 32.
+# Bölge limiti, üretimin merkezindeki yüklü 3x3 chunk için uygulanır.
+# Taşıma/ışınlanma engellenmez. Mevcut entityler silinmez.
+enabled: true
+groups:
+  farm:
+    label: Çiftlik hayvanı
+    per-chunk: 32
+    per-area: 96
+    types: [CHICKEN, COW, SHEEP, PIG, MOOSHROOM, MUSHROOM_COW]
+    suffixes: []
+  villagers:
+    label: Köylü
+    per-chunk: 16
+    per-area: 32
+    types: [VILLAGER, ZOMBIE_VILLAGER]
+    suffixes: []
+  vehicles:
+    label: Tekne/vagon
+    per-chunk: 16
+    per-area: 48
+    types: [BOAT, CHEST_BOAT, MINECART]
+    suffixes: [_BOAT, _RAFT, _MINECART]
+# Yeni çoğalma yerine mevcut bir canlı dönüştürülüyorsa iptal etme.
+# Böylece mantar ineği kırpma ve zombi köylü iyileştirme bozulmaz.
+ignored-spawn-reasons: [CURED, INFECTION, SHEARED, LIGHTNING, SHOULDER_ENTITY, BEEHIVE]
+message-cooldown-seconds: 3
