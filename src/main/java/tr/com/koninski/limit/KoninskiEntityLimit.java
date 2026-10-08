@@ -64,6 +64,7 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
     private long blockedBreeds;
     private long blockedPlacements;
     private tr.com.koninski.limit.optimize.Optimize optimize;
+    private tr.com.koninski.limit.lobotomi.Lobotomi lobotomi;
 
     @Override
     public void onEnable() {
@@ -72,6 +73,7 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
         try {
             readSettings(getConfig());
             optimize = new tr.com.koninski.limit.optimize.Optimize(this, getConfig());
+            lobotomi = new tr.com.koninski.limit.lobotomi.Lobotomi(this, getConfig());
         } catch (IllegalArgumentException ex) {
             getLogger().severe(ascii("Geçersiz config: " + ex.getMessage()));
             getServer().getPluginManager().disablePlugin(this);
@@ -83,6 +85,8 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
+        // setAware kalici oldugu icin uyutulan TUM koyluler kapanirken uyandirilir
+        if (lobotomi != null) lobotomi.kapat();
         if (optimize != null) optimize.kapat();
     }
 
@@ -92,10 +96,12 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
      */
     private void configYukselt() {
         FileConfiguration c = getConfig();
-        if (c.isSet("config-surum") && c.getInt("config-surum") >= 2) return;
+        int surum = c.isSet("config-surum") ? c.getInt("config-surum") : 1;
+        if (surum >= 3) return;
         org.bukkit.configuration.Configuration v = c.getDefaults();
         if (v == null) return;
         int eklenen = 0;
+        if (surum < 2) {
         // isSet: sadece dosyadaki degerlere bakar (contains jar varsayilanlarini da sayar)
         for (String g : List.of("canavarlar", "ambient", "su", "diger_hayvanlar")) {
             if (!c.isSet("groups." + g) && v.isConfigurationSection("groups." + g)) {
@@ -109,9 +115,15 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
                 eklenen++;
             }
         }
-        c.set("config-surum", 2);
+        }
+        // 1.2.0: koylu lobotomisi
+        if (!c.isSet("lobotomi") && v.isConfigurationSection("lobotomi")) {
+            c.createSection("lobotomi", v.getConfigurationSection("lobotomi").getValues(true));
+            eklenen++;
+        }
+        c.set("config-surum", 3);
         saveConfig();
-        getLogger().info("Config 1.1.0 surumune yukseltildi (" + eklenen + " yeni bolum eklendi, mevcut degerler korundu).");
+        getLogger().info("Config 1.2.0 surumune yukseltildi (" + eklenen + " yeni bolum eklendi, mevcut degerler korundu).");
     }
 
     private void readSettings(FileConfiguration config) {
@@ -285,8 +297,10 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
             loaded.load(new File(getDataFolder(), "config.yml"));
             // Iki parca da once dogrulanir: optimize ayari gecersizse limitler de degismez
             tr.com.koninski.limit.optimize.OptimizeAyarlar.oku(loaded);
+            tr.com.koninski.limit.lobotomi.LobotomiAyarlar.oku(loaded);
             readSettings(loaded);
             if (optimize != null) optimize.yenile(loaded);
+            if (lobotomi != null) lobotomi.yenile(loaded);
             sender.sendMessage("§aEntity sınırları yenilendi. Etkin: " + enabled);
         } catch (Exception ex) {
             sender.sendMessage("§cAyarlar geçersiz; önceki sınırlar korundu: " + ex.getMessage());
@@ -298,12 +312,19 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
         if (command.getName().equalsIgnoreCase("optimize") && optimize != null && sender.hasPermission(tr.com.koninski.limit.optimize.Optimize.YETKI)) {
             return optimize.tamamla(args);
         }
+        if (command.getName().equalsIgnoreCase("lobotomi") && lobotomi != null && sender.hasPermission(tr.com.koninski.limit.optimize.Optimize.YETKI)) {
+            return lobotomi.tamamla(args);
+        }
         if (command.getName().equalsIgnoreCase("entitylimit") && args.length == 1) return java.util.List.of("reload");
         return java.util.List.of();
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("lobotomi")) {
+            if (lobotomi != null) lobotomi.komut(sender, args, () -> yenile(sender));
+            return true;
+        }
         if (command.getName().equalsIgnoreCase("optimize")) {
             if (optimize == null) return true;
             return optimize.komut(sender, args, () -> yenile(sender));

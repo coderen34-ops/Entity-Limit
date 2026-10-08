@@ -69,7 +69,7 @@ message-cooldown-seconds: 3
 #  1.1.0 - SUNUCU OPTİMİZASYON ARACI  (/optimize, yetki: koninski.optimize.admin)
 #  Silme/kaldırma işlemleri varsayılan olarak deneme (dry-run): /optimize temizle ... --onayla olmadan hiçbir şey silinmez.
 # ================================================================
-config-surum: 2
+config-surum: 3
 
 optimize:
   # Rapor ve temizlik taramasında tick başına işlenecek yüklü chunk (yüksek = daha hızlı ama tick başına daha çok iş)
@@ -118,3 +118,33 @@ yuk-modu:
   # Sadece bu sebeplerle doğanlar durdurulur; spawner, mob farm, yumurta, komut ve üreme hiçbir zaman etkilenmez.
   iptal-sebepleri: [NATURAL]
   kategoriler: [canavar, ambient]
+
+# ================================================================
+#  1.2.0 - KÖYLÜ LOBOTOMİSİ  (/lobotomi, yetki: koninski.optimize.admin)
+#  Araçtaki ya da sıkışmış köylülerin beyni kapatılır (setAware false); takas ve yeniden stok için
+#  periyodik kısa uyandırma penceresi verilir. Oyuncu yaklaşınca, takas başlayınca ya da köylü araçtan
+#  inince hemen tamamen uyandırılır. Eklenti kapanırken ve chunk boşaltılmadan önce herkes uyandırılır.
+# ================================================================
+lobotomi:
+  aktif: true
+  # Zamanlayıcı kaç tick'te bir çalışır (20 = 1 sn). Oyuncu yaklaşınca en geç bu sürede uyanır.
+  tarama-araligi-tick: 20
+  # Her çalışmada yeni aday aramak için taranacak yüklü chunk sayısı (chunk yüklenmez)
+  tarama-chunk-per-tick: 20
+  # Bu kadar blok yakınında oyuncu olan köylü normal çalışır (takas salonuna giren oyuncu fark etmez)
+  oyuncu-yakinlik-yaricapi: 16
+  # Uyutulan köylü her uyandirma-araligi tick'te bir, uyandirma-suresi tick boyunca uyanır (yeniden stok, iş/yatak)
+  uyandirma-araligi: 100
+  uyandirma-suresi: 3
+  # Sıkışıklık (etrafında yürüyecek yer yok) kontrolü köylü başına en fazla bu aralıkla yeniden yapılır
+  degerlendirme-araligi: 300
+  # Minecart/tekne vb. içindeki köylüler aday mı?
+  arac-ici-aday: true
+  # Hareket edemeyen (4 yanı kapalı) köylüler aday mı?
+  sikisik-aday: true
+  # Mesleği olmayan (NONE) köylüler de uyutulabilsin mi? (nitwit her zaman uyutulabilir)
+  lobotomi-meslegi-olmayanlar: true
+  # İsimli köylülere asla dokunulmaz. true: PDC'sinde HERHANGİ bir eklenti anahtarı olan köylü korunur (NPC'ler).
+  herhangi-pdc-koru: true
+  # herhangi-pdc-koru false yapılırsa sadece bu eklentilerin anahtarları korunur
+  korumali-pdc-namespaceler: [economy, mesleksistemi, klansistemi, arenaligi, tagplugin]
