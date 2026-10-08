@@ -32,9 +32,10 @@ groups:
     per-area: 40
     types: [ZOMBIE, HUSK, DROWNED, SKELETON, STRAY, BOGGED, CREEPER, SPIDER, CAVE_SPIDER, ENDERMAN, WITCH, SLIME, PHANTOM, PILLAGER]
     suffixes: []
-    # Sadece doğal/baskın kaynaklı doğmalar; spawner, mob farm, yumurta ve komutlar etkilenmez
-    spawn-reasons: [NATURAL, REINFORCEMENTS, PATROL, RAID, VILLAGE_INVASION]
-    ignored-spawn-reasons: [SPAWNER, TRIAL_SPAWNER, SPAWNER_EGG, DISPENSE_EGG, CUSTOM, COMMAND, SLIME_SPLIT, DROWNED]
+    # Sadece doğal doğmalar; spawner, mob farm, yumurta ve komutlar etkilenmez.
+    # RAID bilerek yok: baskın dalgaları sınırlanırsa baskın tamamlanamayabilir.
+    spawn-reasons: [NATURAL, REINFORCEMENTS, PATROL, VILLAGE_INVASION]
+    ignored-spawn-reasons: [SPAWNER, TRIAL_SPAWNER, SPAWNER_EGG, DISPENSE_EGG, CUSTOM, COMMAND, SLIME_SPLIT, DROWNED, RAID]
   ambient:
     label: Yarasa
     aktif: true
