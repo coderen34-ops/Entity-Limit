@@ -28,13 +28,29 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** Synchronous creation checks only; no repeating world scans or entity deletion. */
+/**
+ * Synchronous creation checks; no entity deletion here.
+ * 1.1.0: optimizasyon araci (rapor, blok limiti, guvenli temizlik, yuk modu) tr.com.koninski.limit.optimize paketinde.
+ */
 public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
-    private record Group(String id, String label, int chunkLimit, int areaLimit,
-                         Set<String> types, List<String> suffixes) {
-        boolean matches(Entity entity) {
+    /**
+     * aktif: grup kapatilabilir (yoksa true). reasons: bos degilse SADECE bu spawn sebeplerinde uygulanir.
+     * groupIgnored: bu grup icin ek yok sayilan sebepler. Eski gruplarda bu anahtarlar yok, davranis aynen kalir.
+     */
+    public record Group(String id, String label, int chunkLimit, int areaLimit,
+                        Set<String> types, List<String> suffixes,
+                        boolean aktif, Set<String> reasons, Set<String> groupIgnored) {
+        public boolean matches(Entity entity) {
             String type = entity.getType().name();
             return types.contains(type) || suffixes.stream().anyMatch(type::endsWith);
+        }
+
+        /** reason null: ureme/yerlestirme; sebep listesi olan gruplar bunlara uygulanmaz. */
+        boolean appliesTo(String reason) {
+            if (!aktif) return false;
+            if (reason == null) return reasons.isEmpty();
+            if (groupIgnored.contains(reason)) return false;
+            return reasons.isEmpty() || reasons.contains(reason);
         }
     }
     private record Counts(int chunk, int area) {}
@@ -47,19 +63,55 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
     private long blockedSpawns;
     private long blockedBreeds;
     private long blockedPlacements;
+    private tr.com.koninski.limit.optimize.Optimize optimize;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        configYukselt();
         try {
             readSettings(getConfig());
+            optimize = new tr.com.koninski.limit.optimize.Optimize(this, getConfig());
         } catch (IllegalArgumentException ex) {
-            getLogger().severe("Geçersiz config: " + ex.getMessage());
+            getLogger().severe(ascii("Geçersiz config: " + ex.getMessage()));
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
         getServer().getPluginManager().registerEvents(this, this);
-        getLogger().info("Yeni üretim sınırları etkin. Mevcut entityler silinmez; taşıma engellenmez.");
+        getLogger().info(ascii("Yeni üretim sınırları etkin. Mevcut entityler silinmez; taşıma engellenmez."));
+    }
+
+    @Override
+    public void onDisable() {
+        if (optimize != null) optimize.kapat();
+    }
+
+    /**
+     * 1.1.0 yukseltmesi (bir kez): eski config'e yeni gruplar ve optimizasyon bolumleri eklenir.
+     * Mevcut degerlere dokunulmaz; config-surum 2 olunca bir daha calismaz (silinen grup geri gelmez).
+     */
+    private void configYukselt() {
+        FileConfiguration c = getConfig();
+        if (c.isSet("config-surum") && c.getInt("config-surum") >= 2) return;
+        org.bukkit.configuration.Configuration v = c.getDefaults();
+        if (v == null) return;
+        int eklenen = 0;
+        // isSet: sadece dosyadaki degerlere bakar (contains jar varsayilanlarini da sayar)
+        for (String g : List.of("canavarlar", "ambient", "su", "diger_hayvanlar")) {
+            if (!c.isSet("groups." + g) && v.isConfigurationSection("groups." + g)) {
+                c.createSection("groups." + g, v.getConfigurationSection("groups." + g).getValues(true));
+                eklenen++;
+            }
+        }
+        for (String b : List.of("optimize", "yerdeki-esya", "blok-limitleri", "temizlik", "yuk-modu")) {
+            if (!c.isSet(b) && v.isConfigurationSection(b)) {
+                c.createSection(b, v.getConfigurationSection(b).getValues(true));
+                eklenen++;
+            }
+        }
+        c.set("config-surum", 2);
+        saveConfig();
+        getLogger().info("Config 1.1.0 surumune yukseltildi (" + eklenen + " yeni bolum eklendi, mevcut degerler korundu).");
     }
 
     private void readSettings(FileConfiguration config) {
@@ -82,8 +134,16 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
             if (types.isEmpty() && suffixes.isEmpty()) {
                 throw new IllegalArgumentException(id + ": tür listesi boş");
             }
+            Set<String> reasons = new HashSet<>();
+            for (String r : config.getStringList(base + "spawn-reasons")) reasons.add(r.toUpperCase(Locale.ROOT));
+            Set<String> groupIgnored = new HashSet<>();
+            for (String r : config.getStringList(base + "ignored-spawn-reasons")) groupIgnored.add(r.toUpperCase(Locale.ROOT));
+            for (String t : types) {
+                if (!GECERLI_TURLER.contains(t)) getLogger().warning(ascii("Grup " + id + ": bilinmeyen entity turu " + t + " (bu surumde yok, eslesmez)"));
+            }
             parsed.add(new Group(id, config.getString(base + "label", id),
-                    chunk, area, Set.copyOf(types), suffixes));
+                    chunk, area, Set.copyOf(types), suffixes,
+                    config.getBoolean(base + "aktif", true), Set.copyOf(reasons), Set.copyOf(groupIgnored)));
         }
         if (parsed.isEmpty()) throw new IllegalArgumentException("En az bir grup gerekli");
         Set<String> reasons = new HashSet<>();
@@ -97,6 +157,34 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
         ignoredReasons = Set.copyOf(reasons);
         enabled = config.getBoolean("enabled", true);
         cooldown = seconds * 1000;
+    }
+
+    private static final Set<String> GECERLI_TURLER = new HashSet<>();
+    static {
+        for (org.bukkit.entity.EntityType t : org.bukkit.entity.EntityType.values()) GECERLI_TURLER.add(t.name());
+    }
+
+    /** Konsol icin ASCII-guvenli metin (bazi konsollar Turkce harfleri ? gosterir). */
+    public static String ascii(String s) {
+        return s.replace('ç', 'c').replace('Ç', 'C').replace('ğ', 'g').replace('Ğ', 'G').replace('ı', 'i').replace('İ', 'I')
+                .replace('ö', 'o').replace('Ö', 'O').replace('ş', 's').replace('Ş', 'S').replace('ü', 'u').replace('Ü', 'U')
+                .replace('–', '-');
+    }
+
+    public List<Group> groups() { return groups; }
+    public Set<String> ignoredReasons() { return ignoredReasons; }
+    public boolean limitsEnabled() { return enabled; }
+    public long[] blockedCounts() { return new long[]{blockedSpawns, blockedBreeds, blockedPlacements}; }
+
+    /** Tek chunk'taki eslesen entity sayisi (yuklu degilse 0; chunk yuklemez). */
+    private int countChunk(World world, int x, int z, Group group, UUID exclude) {
+        if (!world.isChunkLoaded(x, z) || !world.getChunkAt(x, z).isEntitiesLoaded()) return 0;
+        int n = 0;
+        for (Entity entity : world.getChunkAt(x, z).getEntities()) {
+            if (entity.isDead() || entity.getUniqueId().equals(exclude) || !group.matches(entity)) continue;
+            n++;
+        }
+        return n;
     }
 
     private Counts count(Location location, Group group, UUID exclude) {
@@ -123,10 +211,23 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
     }
 
     private Rejection reject(Entity candidate) {
+        return reject(candidate, null);
+    }
+
+    /**
+     * Ucuz kontrol once (tur ve sebep eslesmesi); sayim sadece eslesen grupta. Kendi chunk'i doluysa
+     * 3x3 bolge hic sayilmaz (sonuc ayni, maliyet daha dusuk).
+     */
+    private Rejection reject(Entity candidate, String reason) {
         if (!enabled) return null;
         for (Group group : groups) {
-            if (!group.matches(candidate)) continue;
-            Counts counts = count(candidate.getLocation(), group, candidate.getUniqueId());
+            if (!group.matches(candidate) || !group.appliesTo(reason)) continue;
+            Location loc = candidate.getLocation();
+            World world = loc.getWorld();
+            if (world == null) continue;
+            int local = countChunk(world, loc.getBlockX() >> 4, loc.getBlockZ() >> 4, group, candidate.getUniqueId());
+            if (local >= group.chunkLimit) return new Rejection(group, new Counts(local, local), false);
+            Counts counts = count(loc, group, candidate.getUniqueId());
             if (counts.chunk >= group.chunkLimit) return new Rejection(group, counts, false);
             if (counts.area >= group.areaLimit) return new Rejection(group, counts, true);
         }
@@ -147,7 +248,7 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onSpawn(CreatureSpawnEvent event) {
         if (ignoredReasons.contains(event.getSpawnReason().name())) return;
-        Rejection rejection = reject(event.getEntity());
+        Rejection rejection = reject(event.getEntity(), event.getSpawnReason().name());
         if (rejection == null) return;
         event.setCancelled(true);
         blockedSpawns++;
@@ -177,24 +278,50 @@ public final class KoninskiEntityLimit extends JavaPlugin implements Listener {
         messages.remove(event.getPlayer().getUniqueId());
     }
 
+    /** /entitylimit reload ve /optimize reload: once dogrulanir, gecersizse onceki ayarlar korunur. */
+    private void yenile(CommandSender sender) {
+        try {
+            YamlConfiguration loaded = new YamlConfiguration();
+            loaded.load(new File(getDataFolder(), "config.yml"));
+            // Iki parca da once dogrulanir: optimize ayari gecersizse limitler de degismez
+            tr.com.koninski.limit.optimize.OptimizeAyarlar.oku(loaded);
+            readSettings(loaded);
+            if (optimize != null) optimize.yenile(loaded);
+            sender.sendMessage("§aEntity sınırları yenilendi. Etkin: " + enabled);
+        } catch (Exception ex) {
+            sender.sendMessage("§cAyarlar geçersiz; önceki sınırlar korundu: " + ex.getMessage());
+        }
+    }
+
+    @Override
+    public java.util.List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (command.getName().equalsIgnoreCase("optimize") && optimize != null && sender.hasPermission(tr.com.koninski.limit.optimize.Optimize.YETKI)) {
+            return optimize.tamamla(args);
+        }
+        if (command.getName().equalsIgnoreCase("entitylimit") && args.length == 1) return java.util.List.of("reload");
+        return java.util.List.of();
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("optimize")) {
+            if (optimize == null) return true;
+            return optimize.komut(sender, args, () -> yenile(sender));
+        }
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             if (!sender.hasPermission("koninski.entitylimit.admin")) {
                 sender.sendMessage("§cYetkin yok.");
                 return true;
             }
-            try {
-                YamlConfiguration loaded = new YamlConfiguration();
-                loaded.load(new File(getDataFolder(), "config.yml"));
-                readSettings(loaded);
-                sender.sendMessage("§aEntity sınırları yenilendi. Etkin: " + enabled);
-            } catch (Exception ex) {
-                sender.sendMessage("§cAyarlar geçersiz; önceki sınırlar korundu: " + ex.getMessage());
-            }
+            yenile(sender);
             return true;
         }
         if (args.length != 0) return false;
+        // 1.1.0: sayilari gormek de yetki ister (onceden herkes bakabiliyordu)
+        if (!sender.hasPermission(tr.com.koninski.limit.optimize.Optimize.YETKI) && !sender.hasPermission("koninski.entitylimit.admin")) {
+            sender.sendMessage("§cYetkin yok.");
+            return true;
+        }
         sender.sendMessage("EntityLimit etkin: " + enabled + "; engellenen spawn/üreme/yerleştirme: "
                 + blockedSpawns + "/" + blockedBreeds + "/" + blockedPlacements);
         if (!(sender instanceof Player player)) {

@@ -1,0 +1,10 @@
+/workspaces/Entity-Limit/src/main/java/tr/com/koninski/limit/KoninskiEntityLimit.java
+/workspaces/Entity-Limit/src/main/java/tr/com/koninski/limit/optimize/BlokLimit.java
+/workspaces/Entity-Limit/src/main/java/tr/com/koninski/limit/optimize/Koruma.java
+/workspaces/Entity-Limit/src/main/java/tr/com/koninski/limit/optimize/Optimize.java
+/workspaces/Entity-Limit/src/main/java/tr/com/koninski/limit/optimize/OptimizeAyarlar.java
+/workspaces/Entity-Limit/src/main/java/tr/com/koninski/limit/optimize/OptimizeLog.java
+/workspaces/Entity-Limit/src/main/java/tr/com/koninski/limit/optimize/Rapor.java
+/workspaces/Entity-Limit/src/main/java/tr/com/koninski/limit/optimize/Tarayici.java
+/workspaces/Entity-Limit/src/main/java/tr/com/koninski/limit/optimize/Temizlik.java
+/workspaces/Entity-Limit/src/main/java/tr/com/koninski/limit/optimize/YukModu.java
